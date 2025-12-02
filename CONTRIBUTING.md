@@ -45,18 +45,6 @@ Thank you for contributing to **Syrrak**. This document describes the processes 
 
 ---
 
-# Branching model
-
-* `main` — production-ready code, always green (CI passing).
-* `develop` — optional (only if used in the repo); otherwise work off `main`.
-* Feature branches: `feat/<short-description>`
-* Fix branches: `fix/<short-description>`
-* Hotfix branches for urgent fixes: `hotfix/<short-description>`
-
-Keep branches focused and short-lived. Rebase interactively to keep history clean when appropriate.
-
----
-
 # Commit messages
 
 Follow **Conventional Commits** (concise, machine-parseable):

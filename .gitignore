@@ -25,3 +25,71 @@ replay_pid*
 
 # Kotlin Gradle plugin data, see https://kotlinlang.org/docs/whatsnew20.html#new-directory-for-kotlin-data-in-gradle-projects
 .kotlin/
+
+# ====================================
+# Kotlin / Gradle / IntelliJ .gitignore
+# ====================================
+
+# Build outputs
+/build/
+/out/
+/target/
+
+# Kotlin-specific
+*.kotlin_metadata
+*.kotlin_builtins
+*.kotlin_module
+
+# IntelliJ IDEA / Android Studio
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Gradle
+.gradle/
+**/build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Local Gradle properties
+gradle.properties
+
+# Logs
+*.log
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# JVM / Java
+*.class
+*.jar
+*.war
+*.ear
+
+# Android (if applicable)
+*.apk
+*.ap_
+.cxx/
+local.properties
+captures/
+.gradle/
+navigation.json
+*.hprof
+
+# Generated files
+generated/
+*.generated
+
+# Testing
+test-results/
+reports/
+
+# Environment / secrets
+.env
+.env.*
+*.keystore
+*.jks
+
+# Kotlin Native (if applicable)
+.konan/

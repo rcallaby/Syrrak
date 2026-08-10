@@ -102,20 +102,18 @@ Detects:
 
 ```mermaid
 flowchart LR
-  A[VpnService TUN Interface] --> B[PacketReader]
-  B --> C[Sessionizer / Flow Table]
-  C --> D[Feature Extractor]
-  D --> E[Rule Engine]
-  D --> F[Anomaly Detector (ML or Z-Score)]
+  A["VpnService TUN Interface"] --> B["PacketReader"]
+  B --> C["Sessionizer / Flow Table"]
+  C --> D["Feature Extractor"]
+  D --> E["Rule Engine"]
+  D --> F["Anomaly Detector (ML or Z-Score)"]
   subgraph BLE
-    J[BLE Scanner] --> D
+    J["BLE Scanner"] --> D
   end
-  E --> G[Alert Store (Encrypted)]
+  E --> G["Alert Store (Encrypted)"]
   F --> G
-  G --> H[UI: Alerts, Export, Settings]
+  G --> H["UI: Alerts, Export, Settings"]
 ```
-
----
 
 ## Project Structure
 

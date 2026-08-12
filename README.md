@@ -1,315 +1,163 @@
-# Syrrak – Mobile Intrusion Detection System (Android Prototype)
+# Syrrak – On-Device Mobile Intrusion Detection System (Android)
 
-**mIDS** is a research-focused **on-device Intrusion Detection System (IDS)** designed specifically for **Android smartphones**, with future support planned for **iOS** and **Linux-based mobile platforms**.
-This prototype demonstrates how to detect suspicious or malicious activity occurring over:
+Syrrak is a research prototype of a local, on-device Intrusion Detection System (mIDS) for Android. It intercepts the device’s own IP traffic using Android’s `VpnService` TUN interface, performs lightweight flow aggregation and feature extraction, applies rule-based detection, and stores alerts in a local Room database. A basic BLE scanner is also included.
 
-* **Wi-Fi**
-* **Bluetooth / BLE**
-* **Cellular data**
-* **Local app-initiated network flows**
+The system does **not** act as a VPN, does not forward or route traffic externally, and does not send any data off-device by default.
 
-The design supports **real-time packet inspection**, **flow/session analysis**, **rule-based detection**, and **lightweight anomaly detection**, while remaining safe, privacy-respectful, and battery-efficient.
+## Core Capabilities (Implemented)
 
-> ⚠️ **Disclaimer:**
-> mIDS is an experimental security research project. It is **not a VPN** or privacy-routing tool. It captures *local device traffic only* via Android’s `VpnService` TUN interface.
-> It does **not** forward traffic or modify routing.
+- **Local packet capture** via `VpnService` + TUN interface (IPv4). Traffic is read, parsed, and discarded; nothing is forwarded.
+- **Lightweight parsing**: IPv4 header, protocol, source/destination addresses, and TCP/UDP ports.
+- **Flow aggregation**: Packets are keyed by 5-tuple. Running statistics (packet count, byte count, inter-arrival times, unique destinations) are maintained in memory.
+- **Windowed feature extraction**: Every 10 seconds the active flows are turned into feature vectors and passed to the detection engine. Flows idle for >60 s are pruned.
+- **Rule engine** with the following starter rules:
+  - High packet rate + low average inter-arrival time
+  - Large number of unique destinations in a short window (scan indicator)
+  - UDP/53 DNS query bursts
+  - High rate of very small packets
+- **Alert persistence**: Alerts (type, message, timestamp, confidence, JSON evidence) are written to a Room database and displayed in the UI.
+- **BLE scanning**: Continuous low-level scan that reports new or strong-RSSI advertisers (currently logged; ready for future rule integration).
+- **Foreground service** with persistent notification while capture is active.
+- **Simple UI**: Start/Stop buttons + live list of the most recent 200 alerts.
 
----
+## Architecture
 
-## Features (Prototype Phase)
-
-The Android prototype implements:
-
-### **1. VpnService-based packet capture**
-
-* Uses a **TUN interface** to intercept outbound & inbound traffic at the IP layer.
-* Works locally; traffic is **never sent to a remote VPN server**.
-* Captured packets are processed via Kotlin coroutines for efficient streaming.
-
-### **2. Lightweight packet parsing**
-
-* IPv4 header parsing
-* TCP/UDP protocol extraction
-* Payload slicing
-* Source and destination IP extraction
-
-### **3. Flow/sessionizer**
-
-* Groups packets by 5-tuple `(srcIP, dstIP, srcPort, dstPort, protocol)`
-* Tracks:
-
-  * packet counts
-  * bytes
-  * average packet size
-  * inter-arrival times
-  * unique destinations
-* Generates windowed features for detection pipelines.
-
-### **4. Feature extractor**
-
-* Aggregates flows into 10-second (configurable) statistical windows.
-* Prepares feature vectors for:
-
-  * rule engine
-  * anomaly detector
-  * ML models (optional)
-
-### **5. Rule engine**
-
-Simple starter rules:
-
-* excessive packet rate
-* very low inter-arrival times
-* potential scanning indicators
-* suspicious DNS bursts
-* malformed packet ratios
-
-Custom rules can be added easily.
-
-### **6. Anomaly detection engine**
-
-Initial supported modes:
-
-* **Z-score baseline detection** (no training required)
-* Optional **TensorFlow Lite model** (autoencoder / IsolationForest)
-* Designed to be expandable toward full behavioral modeling.
-
-### **7. BLE scanning engine**
-
-Detects:
-
-* unknown nearby advertisers
-* excessively strong or fluctuating RSSI
-* suspicious beacon floods
-* advertising payload anomalies
-
-### **8. Encrypted alert storage**
-
-* Uses AndroidX **Security Crypto**
-* Alert JSON + optional flow metadata stored in AES-256 encrypted files
-* Room database stores metadata for UI presentation
-
-### **9. UI Fragments**
-
-* Session summary
-* Live capture state
-* Alerts list
-* Alert details and export options
-
----
-
-## System Architecture
-
-```mermaid
-flowchart LR
-  A["VpnService TUN Interface"] --> B["PacketReader"]
-  B --> C["Sessionizer / Flow Table"]
-  C --> D["Feature Extractor"]
-  D --> E["Rule Engine"]
-  D --> F["Anomaly Detector (ML or Z-Score)"]
-  subgraph BLE
-    J["BLE Scanner"] --> D
-  end
-  E --> G["Alert Store (Encrypted)"]
-  F --> G
-  G --> H["UI: Alerts, Export, Settings"]
 ```
+VpnService (TUN)
+       │
+       ▼
+PacketDispatcher ──► SimpleIpParser
+       │
+       ▼
+FeatureExtractor (in-memory flow table + 10 s windows)
+       │
+       ├──────────────────────────────┐
+       ▼                              ▼
+RuleEngine                    (future anomaly / TFLite)
+       │
+       ▼
+Room (AlertEntity + FlowEntity)
+       │
+       ▼
+UI (AlertsFragment)
+```
+
+BLE results currently feed a separate dispatcher and can be wired into the same feature/detection path later.
 
 ## Project Structure
 
 ```
-mIDS/
-├─ app/
-│  ├─ java/com/example/mids/
-│  │  ├─ net/
-│  │  │  ├─ CaptureVpnService.kt
-│  │  │  ├─ PacketDispatcher.kt
-│  │  │  ├─ SimpleIpParser.kt
-│  │  │  ├─ FlowSessionizer.kt
-│  │  │  ├─ FeatureExtractor.kt
-│  │  │  └─ DetectionPipeline.kt
-│  │  ├─ bt/
-│  │  │  ├─ BleScanner.kt
-│  │  ├─ data/
-│  │  │  ├─ Room Entities & DAO
-│  │  │  ├─ EncryptedStore.kt
-│  │  ├─ ui/
-│  │  │  ├─ fragments/
-│  │  │  │  ├─ SessionFragment.kt
-│  │  │  │  ├─ AlertsFragment.kt
-│  │  │  │  └─ AlertDetailFragment.kt
-│  │  ├─ utils/
-│  │  │  └─ RunningStats.kt
-│  ├─ AndroidManifest.xml
-│  └─ build.gradle
+app/src/main/
+├── java/com/example/mids/
+│   ├── App.kt                     # Application + notification channel
+│   ├── net/
+│   │   ├── CaptureVpnService.kt   # TUN capture + foreground service
+│   │   ├── PacketDispatcher.kt
+│   │   └── SimpleIpParser.kt
+│   ├── feature/
+│   │   └── FeatureExtractor.kt    # Flow table + window emission
+│   ├── detection/
+│   │   ├── DetectionPipeline.kt
+│   │   └── RuleEngine.kt
+│   ├── flow/
+│   │   ├── AppDatabase.kt
+│   │   ├── FlowEntity.kt
+│   │   └── FlowDao.kt
+│   ├── alerts/
+│   │   ├── AlertEntity.kt
+│   │   └── AlertDao.kt
+│   ├── bt/
+│   │   ├── BleScanner.kt
+│   │   └── BluetoothFeatureDispatcher.kt
+│   └── ui/
+│       ├── MainActivity.kt
+│       ├── AlertsFragment.kt
+│       └── ForensicsFragment.kt   # stub
+└── res/
+    ├── layout/
+    ├── values/
+    └── xml/
 ```
 
----
+## Requirements
 
-# Building & Running the Prototype
+- Android Studio Hedgehog / Ladybug or later
+- JDK 17
+- Android SDK 34
+- Physical device recommended (API 26+). Emulator TUN support is limited and unreliable for realistic testing.
+- Permissions requested at runtime:
+  - `BIND_VPN_SERVICE` (system dialog)
+  - `BLUETOOTH_SCAN` / `BLUETOOTH_CONNECT`
+  - `ACCESS_FINE_LOCATION` (required by Android for BLE scan on many versions)
+  - `POST_NOTIFICATIONS` (Android 13+)
 
-## **Prerequisites**
+## Building & Running
 
-* Android Studio Flamingo or later
-* Android SDK 34
-* Real Android device (recommended — emulator networking is limited)
-* Ensure Kernel supports TUN (all modern Android devices do)
+1. Clone or open the project root in Android Studio.
+2. Let Gradle sync (dependencies: Room, Coroutines, Security Crypto, Material).
+3. Select a physical device.
+4. Run the app.
+5. Tap **Start Capture**. Accept the VPN permission dialog.
+6. Grant Bluetooth / location permissions if prompted.
+7. Generate traffic on the device or from another host (see Testing section).
+8. Alerts appear in the list. Tap **Stop Capture** to shut down the service cleanly.
 
-## **1. Clone repository**
+The capture service runs as a foreground service with a low-importance notification. Stopping the service closes the TUN interface and cancels the coroutine job.
 
-```bash
-git clone https://github.com/<your-user>/mIDS.git
-cd mIDS
-```
+## Testing Suggestions
 
-## **2. Open in Android Studio**
+Controlled experiments that exercise the current rules:
 
-Import the Gradle project normally.
+- High-rate ICMP or UDP floods from another machine on the same network.
+- Port scans (`nmap -sS <device-ip>`).
+- Rapid DNS queries (e.g., a script that resolves many domains).
+- BLE beacon spam from a second device or `hcitool`/`bluetoothctl` advertiser.
 
-## **3. Add permissions to `AndroidManifest.xml`**
+Baseline normal traffic (YouTube, messaging apps, etc.) first so that the simple rate-based rules do not fire on ordinary usage. The current rule thresholds are deliberately conservative and intended as starting points.
 
-Included in template; ensure:
+## Current Limitations
 
-* `BIND_VPN_SERVICE`
-* `BLUETOOTH_SCAN`
-* `ACCESS_FINE_LOCATION`
-* `INTERNET`
+- IPv4 only; no IPv6, fragmentation reassembly, or deep packet inspection.
+- No transport-layer reassembly or application-layer parsing beyond basic ports.
+- Feature extraction and rules are purely statistical / threshold-based. No machine-learning models are present yet.
+- Flow table and DB writes are not yet heavily optimised for sustained high packet rates or battery life.
+- BLE results are collected but not yet fully integrated into the rule engine.
+- Alert storage is plaintext Room (AndroidX Security Crypto is on the classpath for future encrypted file support).
+- No pcap export or forensic packaging yet (ForensicsFragment is a stub).
+- UI is minimal (ListView + two buttons).
 
-## **4. Build & run**
+These limitations are intentional for a research prototype focused on the capture → feature → rule pipeline.
 
-Click **Run ▶️** in Android Studio.
+## Roadmap
 
-The app will:
+| Phase | Goal | Status |
+|-------|------|--------|
+| 0.1 | TUN capture, flow features, basic rules, Room, UI | Complete (this tree) |
+| 0.2 | Battery/IO optimisation, better flow expiry, more robust service lifecycle | In progress |
+| 0.3 | Optional on-device anomaly detection (Z-score or TFLite autoencoder) | Planned |
+| 0.4 | Encrypted alert storage + sanitized export | Planned |
+| 0.5 | iOS (NEPacketTunnelProvider) feasibility study | Planned |
+| 1.0 | Hardened beta with improved UI and optional local telemetry | Future |
 
-1. Ask for **VPN permission**
-2. Ask for **Bluetooth scanning permission**
-3. Start the capture service
-4. Begin analyzing flows
+## Privacy & Security Principles
 
----
+- All analysis stays on the device.
+- No remote servers, analytics, or telemetry.
+- TUN interface is used only for local observation; the system never becomes a VPN endpoint.
+- Minimal permission set.
+- Alerts and flow metadata remain in the private app database.
 
-# Building a Test Environment
+## Contributing
 
-To properly validate the IDS, use a controlled multi-device testbed.
+Bug reports and pull requests are welcome. Please:
 
----
+- Keep changes focused and Kotlin-idiomatic.
+- Add or update unit tests for parser / rule / feature logic where practical.
+- Ensure the project still builds and the capture service starts/stops cleanly.
+- Update this README when behaviour or structure changes.
 
-## **A. Wi-Fi Attack / Anomaly Simulation**
+## License
 
-### 1. **Evil Twin Access Point**
+MIT License. See LICENSE file.
 
-Use a small Linux device (Raspberry Pi or laptop):
-
-```bash
-airbase-ng -e "TestAP" -c 6 wlan0
-```
-
-Observe:
-
-* DNS spoofing attempts
-* unusual SNI
-* high SYN retries
-
-### 2. **ARP or ICMP Flooding**
-
-```
-arpspoof -t <victim> <gateway>
-ping <target> -f
-```
-
-mIDS should detect:
-
-* rapid inter-arrival times
-* high packet rate
-
-### 3. **Port Scanning (Nmap)**
-
-From another device:
-
-```
-nmap -sS <android-ip>
-```
-
-Expect detection:
-
-* high SYN-to-ACK ratio
-* burst of flows with unique ports
-
----
-
-## **B. Bluetooth / BLE Attack Simulation**
-
-### 1. BLE Beacon Flood
-
-Using `hcitool`:
-
-```bash
-sudo hcitool -i hci0 lescan --duplicates
-```
-
-Or custom advertiser spamming tools.
-
-### 2. Rogue BLE Device
-
-Randomize MAC + rotate advertisement UUIDs.
-mIDS should flag rapid appearance/disappearance.
-
----
-
-## **C. Network Behavior Profiling**
-
-Run background apps:
-
-* Spotify
-* YouTube
-* Telegram
-* Instagram
-
-Logging normal traffic allows:
-
-* baseline calculation
-* anomaly validation
-* model training (optional)
-
----
-
-# Roadmap
-
-| Phase                  | Goals                                           | Status         |
-| ---------------------- | ----------------------------------------------- | -------------- |
-| **0.1 Prototype**      | TUN capture, BLE scan, sessionizer, rule engine | ✔ Complete     |
-| **0.2 Stability Pass** | Reduce battery usage, Room persistence          | 🕒 In progress |
-| **0.3 ML Integration** | Autoencoder or IsolationForest (TFLite)         | Planned        |
-| **0.4 iOS Research**   | Evaluate NEPacketTunnelProvider feasibility     | Planned        |
-| **0.5 Linux Phones**   | PinePhone / PostmarketOS port                   | Planned        |
-| **1.0 Beta Release**   | Hardening, better UI, telemetry opt-in          | Future         |
-
----
-
-# Security & Privacy Principles
-
-* **No traffic leaves the device by default**
-* **User-consent required** for any cloud upload
-* **pcap exports sanitized** (hashed IPs unless full export requested)
-* **Minimal permissions**
-* **No third-party analytics**
-* **Encrypted storage for all alerts**
-
----
-
-# Contributing
-
-Bug reports and PRs are welcome. Please follow the structure:
-
-1. Fork repository
-2. Create feature branch
-3. Write tests where applicable
-4. Ensure code is Kotlin-idiomatic
-5. Submit pull request
-
----
-
-### License
-
-MIT License — permits research, modification, and commercial use with attribution.
 

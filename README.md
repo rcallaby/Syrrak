@@ -22,25 +22,26 @@ The system does **not** act as a VPN, does not forward or route traffic external
 
 ## Architecture
 
+```mermaid
+flowchart TD
+    A["VpnService (TUN)"]
+    B["PacketDispatcher"]
+    C["SimpleIpParser"]
+    D["FeatureExtractor<br/>(in-memory flow table + 10 s windows)"]
+    E["RuleEngine"]
+    F["(future anomaly / TFLite)"]
+    G["Room<br/>(AlertEntity + FlowEntity)"]
+    H["UI (AlertsFragment)"]
+
+    A --> B
+    B --> C
+    B --> D
+    D --> E
+    D --> F
+    E --> G
+    G --> H
 ```
-VpnService (TUN)
-       │
-       ▼
-PacketDispatcher ──► SimpleIpParser
-       │
-       ▼
-FeatureExtractor (in-memory flow table + 10 s windows)
-       │
-       ├──────────────────────────────┐
-       ▼                              ▼
-RuleEngine                    (future anomaly / TFLite)
-       │
-       ▼
-Room (AlertEntity + FlowEntity)
-       │
-       ▼
-UI (AlertsFragment)
-```
+
 
 BLE results currently feed a separate dispatcher and can be wired into the same feature/detection path later.
 
